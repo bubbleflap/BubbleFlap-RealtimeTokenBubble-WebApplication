@@ -16,8 +16,8 @@
 [Live Demo](https://bubbleflap.fun) · [Report Bug](https://github.com/bubbleflap/BubbleFlap-RealtimeTokenBubble-WebApplication/issues) · [Request Feature](https://github.com/bubbleflap/BubbleFlap-RealtimeTokenBubble-WebApplication/issues)
 
 </div>
-![A preview of the BubbleFlap application](./12.png)
 
+![A preview of the BubbleFlap application](./public/12.jpg)
 ---
 
 ## ✨ Features
