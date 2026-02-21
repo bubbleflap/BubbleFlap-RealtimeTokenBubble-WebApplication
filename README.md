@@ -77,7 +77,7 @@
 | **Database** | PostgreSQL |
 | **Frontend** | React 19 + TypeScript + Tailwind CSS |
 | **Data Source** | Flap.sh GraphQL API (BSC/BNB chain) |
-| **AI** | Claude Sonnet via OpenRouter |
+| **AI** | Claude Sonnet |
 | **Price Feed** | Binance API |
 | **Images** | IPFS via Pinata gateway |
 
@@ -88,7 +88,7 @@
 ### Prerequisites
 - **Node.js** 18+ installed
 - **PostgreSQL** database
-- (Optional) **OpenRouter API key** for AI chatbot
+- (Optional) *Claude API key** for AI chatbot
 
 ### 1. Clone the Repository
 ```bash
@@ -110,7 +110,7 @@ Edit `.env` with your values:
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/bubbleflap
 ADMIN_PASSWORD=your_secure_password
-OPENROUTER_API_KEY=sk-or-v1-your-key  # Optional
+CLAUDE_API_KEY=sk-or-v1-your-key  # Optional
 PORT=3001
 NODE_ENV=production
 ```
@@ -195,7 +195,7 @@ See the full [Deployment Guide](DEPLOYMENT.md) for detailed instructions on depl
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `ADMIN_PASSWORD` | Yes | Password for admin panel access |
-| `OPENROUTER_API_KEY` | No | OpenRouter API key for AI chatbot |
+| `CLAUDE_API_KEY` | No | CLAUDE API key for AI chatbot |
 | `PORT` | No | Server port (default: 3001) |
 | `NODE_ENV` | No | Set to `production` for production mode |
 
