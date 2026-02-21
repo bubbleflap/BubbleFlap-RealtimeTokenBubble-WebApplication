@@ -27,6 +27,7 @@
 - **Market cap-based sizing** — bigger bubbles = bigger market cap
 - **Scroll-to-zoom**, drag-to-pan, pinch-to-zoom on mobile
 - **Smooth organic movement** inspired by wump.fun
+- **BFLAPSWAP - Decentralized Token Exchange
 
 ### 📊 Real On-Chain Data
 - Live token data from **Flap.sh GraphQL API** (BSC/BNB chain)
@@ -53,12 +54,26 @@
 - **Red pulsing glow** + "NEW" badge for 15 seconds
 - Multiple new tokens spread in grid layout to avoid overlap
 
-### 🛡️ Admin Panel
-- Password-protected admin dashboard
-- Real-time **visitor traffic tracking** with charts
-- Site settings management (socials, links, contract address)
-- Online user count
+### 🔁 BFLAPSWAP - Decentralized Token Exchange
 
+A fast, efficient, and fully integrated token swap interface built for the BNB Smart Chain. It allows users to trade any BEP-20 token directly within the BubbleFlap ecosystem.
+
+#### Core Swap Functionality
+- **Seamless Swapping**: Trade any BEP-20 token for another on the BNB Smart Chain.
+- **Real-time Data**: Fetches live price quotes, liquidity, and balance information.
+- **Wallet Integration**: Connects securely with Web3 wallets like MetaMask, Trust Wallet, etc.
+- **Transaction Previews**: Clearly displays `Price Impact`, `Minimum Received`, and `Liquidity Provider Fee` before you confirm.
+
+#### 🧠 Smart Routing & Controls
+- **Multi-Hop Routing**: Finds the most efficient path for your trade by routing through multiple liquidity pools (e.g., `TOKEN A` -> `WBNB` -> `TOKEN B`) to guarantee the best possible price. This can be toggled on or off.
+- **Customizable Slippage**: Set your slippage tolerance (e.g., 0.1%, 0.5%, 1.0%) to protect against price volatility.
+- **Transaction Deadline**: Configure a time limit to prevent pending transactions from executing at an unfavorable price later.
+
+#### 💻 Technology & Integration
+- **Frontend Framework**: Built with **React/Next.js** for a fast and responsive user experience.
+- **Blockchain Interaction**: Utilizes **ethers.js / viem** for robust communication with the BNB Smart Chain.
+- **Liquidity Source**: Integrates directly with **PancakeSwap's Router and SDK** to tap into the largest liquidity pools on BSC.
+- **Wallet Connectivity**: Powered by standard libraries like **Wagmi/Web3-React** for broad wallet compatibility.
 ### 🌐 Additional Features
 - **Click-to-copy** contract address with toast notification
 - **DexScreener** badge and quick link
