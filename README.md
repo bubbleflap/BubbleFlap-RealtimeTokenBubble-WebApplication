@@ -42,7 +42,7 @@
 | **Whitepaper** | Project documentation and vision |
 
 ### 🤖 AI Chatbot — Bot Bubble Flap
-- Powered by **Claude Sonnet** via OpenRouter
+- Powered by **Claude Sonnet**
 - Token analysis, contract address lookup
 - Rich token cards with on-chain data
 - Multilingual support (English / 中文)
