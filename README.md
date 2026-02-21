@@ -1,4 +1,4 @@
-# 🫧 BubbleFlap — Real-Time Token Bubble Visualizer
+# ![A preview of the BubbleFlap application](./public/logo.png) BubbleFlap — Real-Time Token Bubble Visualizer
 
 <div align="center">
 
