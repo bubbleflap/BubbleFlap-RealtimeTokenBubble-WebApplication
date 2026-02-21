@@ -1,7 +1,7 @@
 
 # ![A preview of the BubbleFlap application](./public/logo.png) BubbleFlap — Real-Time Token Bubble Visualizer
 
-[**WE LOVE FLAP.SH**](https://flap.sh/)
+
 <div align="center">
 
 ![BubbleFlap](https://img.shields.io/badge/BubbleFlap-Token%20Visualizer-blueviolet?style=for-the-badge)
@@ -15,7 +15,7 @@
 
 **Watch tokens come alive as physics-based floating bubbles — sized by market cap, updated in real-time.**
 
-[Live Demo](https://bubbleflap.fun) · [Report Bug](https://github.com/bubbleflap/BubbleFlap-RealtimeTokenBubble-WebApplication/issues) · [Request Feature](https://github.com/bubbleflap/BubbleFlap-RealtimeTokenBubble-WebApplication/issues)
+[Live Demo](https://bubbleflap.fun) · [Report Bug](https://github.com/bubbleflap/BubbleFlap-RealtimeTokenBubble-WebApplication/issues) · [Request Feature](https://github.com/bubbleflap/BubbleFlap-RealtimeTokenBubble-WebApplication/issues) [**WE LOVE FLAP.SH**](https://flap.sh/)
 
 </div>
 
