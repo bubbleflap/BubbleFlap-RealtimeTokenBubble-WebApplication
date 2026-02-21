@@ -63,7 +63,7 @@ A fast, efficient, and fully integrated token swap interface built for the BNB S
 - **Real-time Data**: Fetches live price quotes, liquidity, and balance information.
 - **Wallet Integration**: Connects securely with Web3 wallets like MetaMask, Trust Wallet, etc.
 - **Transaction Previews**: Clearly displays `Price Impact`, `Minimum Received`, and `Liquidity Provider Fee` before you confirm.
-- **Swap ungraduated and graduated token from flap.sh
+- Swap ungraduated and graduated token from flap.sh
 
 #### 🧠 Smart Routing & Controls
 - **Multi-Hop Routing**: Finds the most efficient path for your trade by routing through multiple liquidity pools (e.g., `TOKEN A` -> `WBNB` -> `TOKEN B`) to guarantee the best possible price. This can be toggled on or off.
