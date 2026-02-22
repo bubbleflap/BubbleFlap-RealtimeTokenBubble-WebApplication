@@ -240,7 +240,7 @@ fly deploy
 | Tokens not loading | Check that Flap.sh API (`bnb.taxed.fun`) is accessible from your server |
 | Database connection error | Verify `DATABASE_URL` is correct and PostgreSQL is running |
 | WebSocket not connecting | Ensure your reverse proxy (Nginx) supports WebSocket upgrades |
-| AI chatbot not responding | Check `OPENROUTER_API_KEY` is set and valid |
+| AI chatbot not responding | Check `CLAUDE_API_KEY` is set and valid |
 | Admin login failing | Verify `ADMIN_PASSWORD` environment variable is set |
 
 ---
