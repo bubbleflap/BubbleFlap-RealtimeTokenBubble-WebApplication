@@ -19,7 +19,7 @@
 
 </div>
 
-![A preview of the BubbleFlap application](./public/12.png)
+![A preview of the BubbleFlap application](./public/13.png)
 ---
 
 ## ✨ Features
