@@ -13,7 +13,7 @@
 
 **A stunning real-time token visualizer and trading platform for the BSC/BNB blockchain.**
 
-** 0xa2320fff1069ed5b4b02ddb386823e837a7e7777 **
+**0xa2320fff1069ed5b4b02ddb386823e837a7e7777**
 
 **Watch tokens come alive as physics-based floating bubbles — sized by market cap, updated in real-time.**
 
