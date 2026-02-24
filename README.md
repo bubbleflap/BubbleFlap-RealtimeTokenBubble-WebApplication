@@ -12,7 +12,9 @@
 [get $BFLAP](https://bubbleflap.fun/bswap)
 
 **A stunning real-time token visualizer and trading platform for the BSC/BNB blockchain.**
+
 ** 0xa2320fff1069ed5b4b02ddb386823e837a7e7777 **
+
 **Watch tokens come alive as physics-based floating bubbles — sized by market cap, updated in real-time.**
 
 [Live Demo](https://bubbleflap.fun) · [Report Bug](https://github.com/bubbleflap/BubbleFlap-RealtimeTokenBubble-WebApplication/issues) · [Request Feature](https://github.com/bubbleflap/BubbleFlap-RealtimeTokenBubble-WebApplication/issues) [**WE LOVE FLAP.SH**](https://flap.sh/)
