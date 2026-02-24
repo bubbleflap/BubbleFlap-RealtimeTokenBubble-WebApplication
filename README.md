@@ -9,6 +9,9 @@
 ![WebSocket](https://img.shields.io/badge/WebSocket-Real--Time-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
+![get $BFLAP](https://bubbleflap.fun/bswap)
+
+0xa2320fff1069ed5b4b02ddb386823e837a7e7777
 **A stunning real-time token visualizer and trading platform for the BSC/BNB blockchain.**
 
 **Watch tokens come alive as physics-based floating bubbles — sized by market cap, updated in real-time.**
