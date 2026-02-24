@@ -1,8 +1,10 @@
-const express = require("express");
-const { WebSocketServer } = require("ws");
-const http = require("http");
-const pg = require("pg");
-const crypto = require("crypto");
+import express from "express";
+import { WebSocketServer } from "ws";
+import http from "http";
+import pg from "pg";
+import crypto from "crypto";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,12 +22,35 @@ const CACHE_TTL = 10000;
 let cachedNewTokens = [];
 let cachedBondingTokens = [];
 
+// Persistent accumulator: address -> token object for ALL graduated tokens ever seen
+// across any boardV2 section. Survives individual API polling gaps.
+const graduatedCache = new Map();
+
 const knownNewlyCreated = new Set();
 const newlyDetectedTimestamps = new Map();
 let isFirstFetch = true;
 
+// Tracks tokens seen in the "graduating" section so we can later check if they
+// disappeared because they graduated (as opposed to just falling out of the list).
+// address -> { coin raw data, firstSeenAt ms }
+const graduationWatchList = new Map();
+
+// Every address ever seen from any Flap.sh boardV2 section.
+// Used to directly check DexScreener for graduation status on known tokens.
+const allKnownFlapAddresses = new Map(); // address -> raw coin data (last seen)
+
 let bnbPrice = 600;
 let lastPriceFetch = 0;
+
+// BSC on-chain graduation detection via PancakeSwap V2 factory PairCreated events
+const BSC_RPC = 'https://bsc.publicnode.com';
+const PANCAKE_V2_FACTORY = '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73';
+const PAIR_CREATED_TOPIC = '0x0d3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9';
+const BSC_BLOCKS_PER_DAY = 28800; // ~3 sec/block
+let lastCheckedBlock = 0; // 0 = not initialized yet
+
+// Flap.sh uses a factory pattern where all token addresses end in 7777 or 8888
+const isFlapAddress = addr => addr.endsWith('7777') || addr.endsWith('8888');
 
 const dexCache = new Map();
 const DEX_CACHE_TTL = 120000;
@@ -34,46 +59,48 @@ const dexPaidDetectedAtMap = new Map();
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
 async function initDb() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS site_settings (
-        key VARCHAR(100) PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    await pool.query(`
-      INSERT INTO site_settings (key, value) VALUES 
-        ('ca_address', '0x000000000000000000000000'),
-        ('telegram', 'https://t.me/BubbleFlap'),
-        ('twitter', 'https://x.com/BubbleFlapFun'),
-        ('github', 'https://github.com/bubbleflap'),
-        ('email', 'dev@bubbleflap.fun'),
-        ('bflap_link', 'https://flap.sh/bnb/0x'),
-        ('flapsh_link', 'https://flap.sh/bnb/board')
-      ON CONFLICT (key) DO NOTHING
-    `);
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS site_visitors (
-        id SERIAL PRIMARY KEY,
-        visitor_id VARCHAR(100) NOT NULL,
-        ip_hash VARCHAR(100) NOT NULL,
-        page VARCHAR(200) NOT NULL DEFAULT '/',
-        user_agent TEXT,
-        referrer TEXT,
-        country VARCHAR(10) DEFAULT NULL,
-        last_seen TIMESTAMP NOT NULL DEFAULT now(),
-        created_at TIMESTAMP NOT NULL DEFAULT now()
-      )
-    `);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_visitor_id ON site_visitors (visitor_id)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_ip_hash ON site_visitors (ip_hash)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_last_seen ON site_visitors (last_seen)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_created_at ON site_visitors (created_at)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_country ON site_visitors (country)`);
-  } catch (err) {
-    console.error("DB init error:", err.message);
-  }
+  const runSafe = async (label, fn) => {
+    try { await fn(); } catch (e) {
+      if (e.message && e.message.includes('must be owner')) return;
+      console.error(`DB init (${label}):`, e.message);
+    }
+  };
+  await runSafe('site_settings', () => pool.query(`
+    CREATE TABLE IF NOT EXISTS site_settings (
+      key VARCHAR(100) PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `));
+  await runSafe('seed settings', () => pool.query(`
+    INSERT INTO site_settings (key, value) VALUES 
+      ('ca_address', '0x000000000000000000000000'),
+      ('telegram', 'https://t.me/BubbleFlap'),
+      ('twitter', 'https://x.com/BubbleFlapFun'),
+      ('github', 'https://github.com/bubbleflap'),
+      ('email', 'dev@bubbleflap.fun'),
+      ('bflap_link', 'https://flap.sh/bnb/0x'),
+      ('flapsh_link', 'https://flap.sh/bnb/board')
+    ON CONFLICT (key) DO NOTHING
+  `));
+  await runSafe('site_visitors', () => pool.query(`
+    CREATE TABLE IF NOT EXISTS site_visitors (
+      id SERIAL PRIMARY KEY,
+      visitor_id VARCHAR(100) NOT NULL,
+      ip_hash VARCHAR(100) NOT NULL,
+      page VARCHAR(200) NOT NULL DEFAULT '/',
+      user_agent TEXT,
+      referrer TEXT,
+      country VARCHAR(10) DEFAULT NULL,
+      last_seen TIMESTAMP NOT NULL DEFAULT now(),
+      created_at TIMESTAMP NOT NULL DEFAULT now()
+    )
+  `));
+  await runSafe('idx visitor_id', () => pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_visitor_id ON site_visitors (visitor_id)`));
+  await runSafe('idx ip_hash', () => pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_ip_hash ON site_visitors (ip_hash)`));
+  await runSafe('idx last_seen', () => pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_last_seen ON site_visitors (last_seen)`));
+  await runSafe('idx created_at', () => pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_created_at ON site_visitors (created_at)`));
+  await runSafe('idx country', () => pool.query(`CREATE INDEX IF NOT EXISTS idx_site_visitors_country ON site_visitors (country)`));
 }
 initDb();
 
@@ -140,9 +167,12 @@ const BOARD_QUERY = `{
   }
 }`;
 
-const LISTED_COINS_QUERY = `{
-  coins(options: { listed: true, hideListed: false, duel: false, asc: false, limit: 100, offset: 0, sort: 0 }) {
-    ${COIN_FIELDS}
+const RECENT_BONDING_QUERY = `{
+  boardV2 {
+    verified(limit: 50) { coins { ${COIN_FIELDS} } }
+    newlyCreated(limit: 50) { coins { ${COIN_FIELDS} } }
+    graduating(limit: 50) { coins { ${COIN_FIELDS} } }
+    listed(limit: 50) { coins { ${COIN_FIELDS} } }
   }
 }`;
 
@@ -215,11 +245,20 @@ async function checkDexScreener(addresses) {
             if (hasPaid && !dexPaidDetectedAtMap.has(addr.toLowerCase())) {
               dexPaidDetectedAtMap.set(addr.toLowerCase(), now);
             }
+            const bestPair = tokenPairs[0];
+            const txns24h = bestPair?.txns?.h24 || {};
             dexCache.set(addr.toLowerCase(), {
               time: now,
               paid: hasPaid,
               pairCount: tokenPairs.length,
-              priceUsd: tokenPairs[0]?.priceUsd || null,
+              priceUsd: bestPair?.priceUsd || null,
+              volume24h: bestPair?.volume?.h24 || 0,
+              liquidity: bestPair?.liquidity?.usd || 0,
+              priceChange24h: bestPair?.priceChange?.h24 || 0,
+              buys24h: txns24h.buys || 0,
+              sells24h: txns24h.sells || 0,
+              dexUrl: bestPair?.url || null,
+              pairCreatedAt: bestPair?.pairCreatedAt || null,
             });
           }
         }
@@ -233,29 +272,41 @@ async function checkDexScreener(addresses) {
   const result = {};
   for (const addr of addresses) {
     const cached = dexCache.get(addr.toLowerCase());
-    result[addr.toLowerCase()] = cached || { paid: false, pairCount: 0, priceUsd: null };
+    result[addr.toLowerCase()] = cached || { paid: false, pairCount: 0, priceUsd: null, volume24h: 0, liquidity: 0, priceChange24h: 0, buys24h: 0, sells24h: 0, dexUrl: null };
   }
   return result;
 }
 
-function calcPrice(coin, bnb) {
-  const supply = parseFloat(coin.supply) || 0;
-  const mcapBnb = parseFloat(coin.marketcap) || 0;
-  if (supply > 0 && mcapBnb > 0) {
-    return (mcapBnb / supply) * bnb;
-  }
-  return 0;
-}
 
 const BURN_ADDRESS = "0x000000000000000000000000000000000000dead";
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const TOTAL_SUPPLY = 1_000_000_000;
 
-function calcBurnPercent(coin) {
+function getBurnedAmount(coin) {
   if (!coin.holders || !Array.isArray(coin.holders)) return 0;
-  const burnHolder = coin.holders.find((h) => h.holder?.toLowerCase() === BURN_ADDRESS);
-  if (!burnHolder) return 0;
-  const burnAmount = parseFloat(burnHolder.amount) || 0;
-  return (burnAmount / TOTAL_SUPPLY) * 100;
+  let burned = 0;
+  for (const h of coin.holders) {
+    const addr = h.holder?.toLowerCase();
+    if (addr === BURN_ADDRESS || addr === ZERO_ADDRESS) {
+      burned += parseFloat(h.amount) || 0;
+    }
+  }
+  return burned;
+}
+
+function calcBurnPercent(coin) {
+  const burned = getBurnedAmount(coin);
+  if (burned <= 0) return 0;
+  return (burned / TOTAL_SUPPLY) * 100;
+}
+
+function calcPrice(coin, bnb) {
+  const mcapBnb = parseFloat(coin.marketcap) || 0;
+  if (mcapBnb <= 0) return 0;
+  const burned = getBurnedAmount(coin);
+  const circulating = TOTAL_SUPPLY - burned;
+  if (circulating <= 0) return 0;
+  return (mcapBnb * bnb) / circulating;
 }
 
 function calcDevHold(coin) {
@@ -315,6 +366,11 @@ function mapCoin(coin, price, section) {
     section: section,
     dexPaid: false,
     dexPairCount: 0,
+    volume24h: 0,
+    liquidity: 0,
+    buys24h: 0,
+    sells24h: 0,
+    dexUrl: null,
   };
 }
 
@@ -325,12 +381,8 @@ async function fetchFlapTokens() {
   }
 
   try {
-    const [data, listedData, price] = await Promise.all([
+    const [data, price] = await Promise.all([
       queryFlap(BOARD_QUERY),
-      queryFlap(LISTED_COINS_QUERY).catch(err => {
-        console.error("Listed coins query error:", err.message);
-        return null;
-      }),
       fetchBnbPrice(),
     ]);
 
@@ -351,15 +403,6 @@ async function fetchFlapTokens() {
         if (!seen.has(coin.address)) {
           seen.add(coin.address);
           allCoins.push({ coin, section: section.name });
-        }
-      }
-    }
-
-    if (listedData?.coins) {
-      for (const coin of listedData.coins) {
-        if (!seen.has(coin.address)) {
-          seen.add(coin.address);
-          allCoins.push({ coin, section: "listed" });
         }
       }
     }
@@ -414,6 +457,12 @@ async function fetchFlapTokens() {
         if (dex) {
           token.dexPaid = dex.paid || false;
           token.dexPairCount = dex.pairCount || 0;
+          token.volume24h = dex.volume24h || 0;
+          token.liquidity = dex.liquidity || 0;
+          token.change24h = dex.priceChange24h || 0;
+          token.buys24h = dex.buys24h || 0;
+          token.sells24h = dex.sells24h || 0;
+          token.dexUrl = dex.dexUrl || null;
         }
       }
     } catch (err) {
@@ -648,6 +697,10 @@ app.get("/api/bonded-tokens", async (req, res) => {
   const tokens = await fetchFlapTokens();
   const bondedOnly = tokens.filter((t) => t.listed);
   res.json({ tokens: bondedOnly });
+});
+
+app.get("/api/recent-bonding", (req, res) => {
+  res.json({ tokens: recentBondingTokens });
 });
 
 app.get("/api/highcap-tokens", async (req, res) => {
@@ -906,6 +959,11 @@ app.post("/api/chat", async (req, res) => {
     found = tokens.find((t) => t.address.toLowerCase() === addr);
 
     if (!found) {
+      // Check graduated cache (covers listed/bonded tokens from Recent Bonding)
+      found = graduatedCache.get(addr) || null;
+    }
+
+    if (!found) {
       try {
         const COIN_QUERY = `query($address: String!) {
           coin(address: $address) {
@@ -1068,7 +1126,350 @@ Rules:
   }
 });
 
+const FLAP_PORTAL_BSC = "0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0";
+const PANCAKE_V2_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+const PANCAKE_V3_ROUTER = "0x13f4EA83D0bd40E75C8222255bc855a974568Dd4";
+const WBNB_ADDRESS = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
+
+const BSC_CURVE_R = 6.14;
+const BSC_CURVE_H = 107036752;
+const BSC_CURVE_K = 6797205657.28;
+const BILLION = 1e9;
+
+function flapQuoteBuy(inputBnb, reserveBnb, circulatingSupply) {
+  const x = BILLION + BSC_CURVE_H - circulatingSupply;
+  const y = reserveBnb;
+  const k = BSC_CURVE_K;
+  const r = BSC_CURVE_R;
+  const newY = y + inputBnb;
+  const newX = k / (newY + r);
+  const tokensOut = x - newX;
+  return Math.max(0, tokensOut);
+}
+
+function flapQuoteSell(tokenAmount, reserveBnb, circulatingSupply) {
+  const x = BILLION + BSC_CURVE_H - circulatingSupply;
+  const y = reserveBnb;
+  const k = BSC_CURVE_K;
+  const r = BSC_CURVE_R;
+  const newX = x + tokenAmount;
+  const newY = k / (newX) - r;
+  const bnbOut = y - newY;
+  return Math.max(0, bnbOut);
+}
+
+function flapGetPrice(reserveBnb, circulatingSupply) {
+  const x = BILLION + BSC_CURVE_H - circulatingSupply;
+  const r = BSC_CURVE_R;
+  const k = BSC_CURVE_K;
+  return k / ((x) * (x)) * (1);
+}
+
+app.get("/api/swap/quote", async (req, res) => {
+  try {
+    const { tokenAddress, inputAmount, direction } = req.query;
+    if (!tokenAddress || !inputAmount || !direction) {
+      return res.status(400).json({ error: "Missing tokenAddress, inputAmount, or direction (buy/sell)" });
+    }
+
+    const amount = parseFloat(inputAmount);
+    if (isNaN(amount) || amount <= 0) {
+      return res.status(400).json({ error: "Invalid inputAmount" });
+    }
+
+    await fetchBnbPrice();
+
+    const allTokens = [...cachedNewTokens, ...cachedBondingTokens];
+    const token = allTokens.find(t => t.address?.toLowerCase() === tokenAddress.toLowerCase());
+
+    if (!token) {
+      try {
+        const WBNB_ADDR = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
+        const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+        const RPC_URL = "https://bsc-dataseed.binance.org/";
+
+        const amountWei = BigInt(Math.floor(amount * 1e18));
+        const path = direction === "buy"
+          ? [WBNB_ADDR, tokenAddress]
+          : [tokenAddress, WBNB_ADDR];
+
+        const pathEncoded = path.map(a => a.replace("0x", "").padStart(64, "0")).join("");
+        const callData = "0xd06ca61f" +
+          amountWei.toString(16).padStart(64, "0") +
+          "0000000000000000000000000000000000000000000000000000000000000040" +
+          "0000000000000000000000000000000000000000000000000000000000000002" +
+          pathEncoded;
+
+        const rpcResp = await fetch(RPC_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0", id: 1, method: "eth_call",
+            params: [{ to: PANCAKE_ROUTER, data: callData }, "latest"]
+          }),
+        });
+        const rpcData = await rpcResp.json();
+
+        if (rpcData.result && rpcData.result !== "0x") {
+          const hex = rpcData.result.slice(2);
+          const outputHex = hex.slice(192, 256);
+          const outputWei = BigInt("0x" + outputHex);
+          const outputAmount = Number(outputWei) / 1e18;
+
+          const currentPrice = direction === "buy"
+            ? amount * bnbPrice / outputAmount
+            : outputAmount * bnbPrice / amount;
+
+          return res.json({
+            router: "pancakeswap",
+            routerName: "PancakeSwap V2",
+            routerAddress: PANCAKE_ROUTER,
+            tokenAddress,
+            tokenName: tokenAddress,
+            tokenTicker: "",
+            tokenImage: "",
+            direction,
+            inputAmount: amount,
+            outputAmount,
+            currentPrice,
+            currentPriceUsd: currentPrice,
+            priceImpact: 0.5,
+            fee: "0.25%",
+            taxRate: "0%",
+            bondProgress: 100,
+            graduated: true,
+            bnbPrice,
+            mcap: 0,
+          });
+        }
+      } catch (e) {
+        console.error("PancakeSwap quote error:", e.message);
+      }
+
+      return res.json({
+        router: "unknown",
+        error: "Token not found. Try refreshing.",
+        tokenAddress,
+      });
+    }
+
+    const isGraduated = token.graduated || token.listed;
+    const taxRate = token.taxRate || 0;
+
+    if (!isGraduated) {
+      const reserveBnb = token.reserveBnb || 0;
+      const totalSupply = BILLION;
+      const circulatingSupply = token.bondProgress ? (token.bondProgress / 100) * 800000000 : 0;
+
+      let outputAmount, priceImpact, currentPrice;
+      currentPrice = flapGetPrice(reserveBnb, circulatingSupply);
+
+      if (direction === "buy") {
+        const feeAmount = amount * 0.01;
+        const netInput = amount - feeAmount;
+        outputAmount = flapQuoteBuy(netInput, reserveBnb, circulatingSupply);
+        const avgPrice = amount / outputAmount;
+        priceImpact = Math.abs((avgPrice - currentPrice) / currentPrice) * 100;
+      } else {
+        outputAmount = flapQuoteSell(amount, reserveBnb, circulatingSupply);
+        const feeAmount = outputAmount * 0.01;
+        outputAmount = outputAmount - feeAmount;
+        if (taxRate > 0) {
+          outputAmount = outputAmount * (1 - taxRate / 10000);
+        }
+        const avgPrice = outputAmount / amount;
+        priceImpact = Math.abs((currentPrice - avgPrice) / currentPrice) * 100;
+      }
+
+      return res.json({
+        router: "flap",
+        routerName: "Flap.sh Bonding Curve",
+        routerAddress: FLAP_PORTAL_BSC,
+        tokenAddress,
+        tokenName: token.name || token.ticker,
+        tokenTicker: token.ticker,
+        tokenImage: token.image,
+        direction,
+        inputAmount: amount,
+        outputAmount: Math.max(0, outputAmount),
+        currentPrice,
+        currentPriceUsd: currentPrice * bnbPrice,
+        priceImpact: Math.min(priceImpact, 100),
+        fee: "1%",
+        taxRate: taxRate > 0 ? `${taxRate / 100}%` : "0%",
+        bondProgress: token.bondProgress || 0,
+        reserveBnb,
+        graduated: false,
+        bnbPrice,
+        mcap: token.mcap,
+      });
+    } else {
+      const WBNB_ADDR = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
+      const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+      const RPC_URL = "https://bsc-dataseed.binance.org/";
+
+      let outputAmount;
+      let routerUsed = taxRate > 0 ? "pancakeswap_v2" : "pancakeswap_v3";
+      let routerAddress = taxRate > 0 ? PANCAKE_V2_ROUTER : PANCAKE_V3_ROUTER;
+      let routerName = taxRate > 0 ? "PancakeSwap V2" : "PancakeSwap V3";
+
+      try {
+        const amountWei = BigInt(Math.floor(amount * 1e18));
+        const path = direction === "buy"
+          ? [WBNB_ADDR, tokenAddress]
+          : [tokenAddress, WBNB_ADDR];
+        const pathEncoded = path.map(a => a.replace("0x", "").padStart(64, "0")).join("");
+        const callData = "0xd06ca61f" +
+          amountWei.toString(16).padStart(64, "0") +
+          "0000000000000000000000000000000000000000000000000000000000000040" +
+          "0000000000000000000000000000000000000000000000000000000000000002" +
+          pathEncoded;
+
+        const rpcResp = await fetch(RPC_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0", id: 1, method: "eth_call",
+            params: [{ to: PANCAKE_ROUTER, data: callData }, "latest"]
+          }),
+        });
+        const rpcData = await rpcResp.json();
+
+        if (rpcData.result && rpcData.result !== "0x") {
+          const hex = rpcData.result.slice(2);
+          const outputHex = hex.slice(192, 256);
+          const outputWei = BigInt("0x" + outputHex);
+          outputAmount = Number(outputWei) / 1e18;
+          routerUsed = "pancakeswap";
+          routerAddress = PANCAKE_ROUTER;
+          routerName = "PancakeSwap V2";
+        }
+      } catch (e) {
+        console.error("PancakeSwap on-chain quote error:", e.message);
+      }
+
+      if (!outputAmount) {
+        const tokenPrice = token.price || 0;
+        if (direction === "buy") {
+          outputAmount = tokenPrice > 0 ? (amount * bnbPrice) / tokenPrice : 0;
+        } else {
+          outputAmount = tokenPrice > 0 ? (amount * tokenPrice) / bnbPrice : 0;
+        }
+      }
+
+      const tokenPrice = token.price || 0;
+
+      return res.json({
+        router: routerUsed,
+        routerName,
+        routerAddress,
+        tokenAddress,
+        tokenName: token.name || token.ticker,
+        tokenTicker: token.ticker,
+        tokenImage: token.image,
+        direction,
+        inputAmount: amount,
+        outputAmount,
+        currentPrice: tokenPrice,
+        currentPriceUsd: tokenPrice,
+        priceImpact: amount > 1 ? 0.5 : 0.1,
+        fee: "0.25%",
+        taxRate: taxRate > 0 ? `${taxRate / 100}%` : "0%",
+        bondProgress: 100,
+        graduated: true,
+        bnbPrice,
+        mcap: token.mcap,
+      });
+    }
+  } catch (err) {
+    console.error("Swap quote error:", err.message);
+    res.status(500).json({ error: "Failed to get swap quote" });
+  }
+});
+
+app.get("/api/swap/token-info", async (req, res) => {
+  try {
+    const { address } = req.query;
+    if (!address) return res.status(400).json({ error: "Missing address" });
+
+    const localToken = [...cachedNewTokens, ...cachedBondingTokens].find(
+      t => t.address && t.address.toLowerCase() === address.toLowerCase()
+    );
+    if (localToken) {
+      return res.json({
+        address: localToken.address,
+        mcap: localToken.mcap || 0,
+        price: localToken.price || 0,
+        holders: localToken.holders || 0,
+        taxRate: localToken.taxRate || 0,
+        name: localToken.name,
+        ticker: localToken.ticker,
+        image: localToken.image,
+        graduated: localToken.graduated || localToken.listed,
+      });
+    }
+
+    const dexResp = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    const dexData = await dexResp.json();
+
+    if (dexData.pairs && dexData.pairs.length > 0) {
+      const bscPairs = dexData.pairs.filter(p => p.chainId === "bsc");
+      const pair = bscPairs[0] || dexData.pairs[0];
+      return res.json({
+        address,
+        mcap: pair.marketCap || pair.fdv || 0,
+        price: parseFloat(pair.priceUsd) || 0,
+        holders: 0,
+        taxRate: 0,
+        name: pair.baseToken?.name || "",
+        ticker: pair.baseToken?.symbol || "",
+        image: "",
+        graduated: true,
+      });
+    }
+
+    return res.json({ address, mcap: 0, price: 0, holders: 0, taxRate: 0, name: "", ticker: "", image: "", graduated: true });
+  } catch (err) {
+    console.error("Token info error:", err.message);
+    res.status(500).json({ error: "Failed to fetch token info" });
+  }
+});
+
+app.get("/api/swap/tokens", (req, res) => {
+  const allTokens = [...cachedNewTokens, ...cachedBondingTokens];
+  const tokens = allTokens.map(t => ({
+    address: t.address,
+    name: t.name,
+    ticker: t.ticker,
+    image: t.image,
+    price: t.price,
+    mcap: t.mcap,
+    graduated: t.graduated || t.listed,
+    bondProgress: t.bondProgress,
+    taxRate: t.taxRate,
+    reserveBnb: t.reserveBnb,
+    holders: t.holders,
+  }));
+  res.json({ tokens, bnbPrice });
+});
+
 app.use(express.static("public"));
+
+const __filename2 = fileURLToPath(import.meta.url);
+const __dirname2 = dirname(__filename2);
+
+// Specific routes for swap to ensure index.html is served for client-side routing
+app.get(["/bswap", "/swap", "/bflapswap", "/bflap-swap"], (req, res) => {
+  res.sendFile(join(__dirname2, "public", "index.html"));
+});
+
+app.get("*", (req, res) => {
+  if (!req.path.startsWith("/api") && !req.path.startsWith("/ws")) {
+    res.sendFile(join(__dirname2, "public", "index.html"));
+  }
+});
 
 const server = http.createServer(app);
 
@@ -1098,8 +1499,394 @@ wss.on("connection", (ws) => {
   ws.on("close", () => console.log(`WS client disconnected (${ws._channel || "no-channel"})`));
 });
 
+let recentBondingTokens = [];
+
+// Search DexScreener for all Flap.sh tokens that have graduated to PancakeSwap BSC.
+// All Flap.sh factory tokens have addresses ending in "7777" — this is the definitive
+// filter. Any such address on PancakeSwap BSC graduated through the 16 BNB bonding curve
+// (even if current liquidity dropped due to price action after graduation).
+async function fetchGraduatedViaDexScreener(bnbPrice) {
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const results = new Map();
+
+  try {
+    const [res7777, res8888] = await Promise.all([
+      fetch('https://api.dexscreener.com/latest/dex/search?q=7777', { headers: { 'User-Agent': BROWSER_UA } }),
+      fetch('https://api.dexscreener.com/latest/dex/search?q=8888', { headers: { 'User-Agent': BROWSER_UA } }),
+    ]);
+    const pairs = [
+      ...((res7777.ok ? await res7777.json() : {})?.pairs || []),
+      ...((res8888.ok ? await res8888.json() : {})?.pairs || []),
+    ];
+
+    for (const pair of pairs) {
+      const addr = pair.baseToken?.address?.toLowerCase();
+      if (!addr) continue;
+      // Must be BSC PancakeSwap, Flap.sh address pattern (ends in 7777 or 8888),
+      // and created within 30 days
+      if (
+        pair.chainId !== 'bsc' ||
+        !isFlapAddress(addr) ||
+        !pair.pairCreatedAt ||
+        pair.pairCreatedAt < thirtyDaysAgo
+      ) continue;
+
+      // Skip if already have a better entry (prefer Flap.sh data)
+      if (results.has(addr)) continue;
+
+      results.set(addr, {
+        address: pair.baseToken.address,
+        name: pair.baseToken.name || pair.baseToken.symbol,
+        ticker: pair.baseToken.symbol,
+        mcap: pair.marketCap || 0,
+        mcapBnb: (pair.marketCap || 0) / (bnbPrice || 1),
+        price: parseFloat(pair.priceUsd) || 0,
+        holders: 0,
+        change24h: pair.priceChange?.h24 || 0,
+        image: pair.info?.imageUrl || null,
+        createdAt: new Date(pair.pairCreatedAt).toISOString(),
+        graduatedAt: pair.pairCreatedAt,
+        devHoldPercent: 0,
+        burnPercent: 0,
+        devWallet: null,
+        sniperHoldPercent: 0,
+        website: pair.info?.websites?.[0]?.url || null,
+        twitter: null,
+        telegram: null,
+        bondingCurve: false,
+        bondProgress: 100,
+        reserveBnb: 0,
+        graduated: true,
+        listed: true,
+        taxRate: 0,
+        taxEarned: 0,
+        beneficiary: null,
+        description: null,
+        section: 'listed',
+        dexPaid: pair.boosts?.active > 0 || false,
+        dexPairCount: 1,
+        volume24h: pair.volume?.h24 || 0,
+        liquidity: pair.liquidity?.usd || 0,
+        buys24h: pair.txns?.h24?.buys || 0,
+        sells24h: pair.txns?.h24?.sells || 0,
+        dexUrl: pair.url || null,
+      });
+    }
+  } catch (err) {
+    console.error('[RECENT BONDING] DexScreener search error:', err.message);
+  }
+
+  return results;
+}
+
+// Fetch full token details from DexScreener for a list of addresses
+async function lookupDexScreenerTokens(addresses) {
+  const result = new Map();
+  const batches = [];
+  for (let i = 0; i < addresses.length; i += 30) {
+    batches.push(addresses.slice(i, i + 30));
+  }
+  for (const batch of batches) {
+    try {
+      const res = await fetch(`https://api.dexscreener.com/tokens/v1/bsc/${batch.join(',')}`, {
+        headers: { 'User-Agent': BROWSER_UA },
+      });
+      if (!res.ok) continue;
+      const pairs = await res.json();
+      if (!Array.isArray(pairs)) continue;
+      const byAddr = new Map();
+      for (const pair of pairs) {
+        const addr = pair.baseToken?.address?.toLowerCase();
+        if (!addr) continue;
+        if (!byAddr.has(addr) || (byAddr.get(addr).pairCreatedAt || 0) > (pair.pairCreatedAt || 0)) {
+          byAddr.set(addr, pair);
+        }
+      }
+      for (const [addr, pair] of byAddr) {
+        result.set(addr, pair);
+      }
+    } catch (err) {
+      console.error('[DEX LOOKUP] Batch error:', err.message);
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+  return result;
+}
+
+// Monitor PancakeSwap V2 factory for new PairCreated events with Flap.sh (7777) tokens.
+// On first run: scans back 3 days. Subsequent runs: only new blocks.
+async function fetchNewGraduationsFromChain(price) {
+  try {
+    const blockRes = await fetch(BSC_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 }),
+    });
+    const blockData = await blockRes.json();
+    if (!blockData.result) return;
+    const currentBlock = parseInt(blockData.result, 16);
+
+    if (lastCheckedBlock === 0) {
+      // Start 3 days back on initial run
+      lastCheckedBlock = currentBlock - 3 * BSC_BLOCKS_PER_DAY;
+    }
+    if (currentBlock <= lastCheckedBlock) return;
+
+    const CHUNK = 5000;
+    const newFlapAddresses = [];
+
+    for (let from = lastCheckedBlock + 1; from <= currentBlock; from += CHUNK) {
+      const to = Math.min(from + CHUNK - 1, currentBlock);
+      try {
+        const logsRes = await fetch(BSC_RPC, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1, method: 'eth_getLogs',
+            params: [{
+              address: PANCAKE_V2_FACTORY,
+              topics: [PAIR_CREATED_TOPIC],
+              fromBlock: '0x' + from.toString(16),
+              toBlock: '0x' + to.toString(16),
+            }],
+          }),
+        });
+        const logsData = await logsRes.json();
+        for (const log of (logsData.result || [])) {
+          // PairCreated(indexed token0, indexed token1, pair, uint)
+          // topics[1] = token0, topics[2] = token1 — each padded to 32 bytes
+          const token0 = ('0x' + log.topics[1].slice(26)).toLowerCase();
+          const token1 = ('0x' + log.topics[2].slice(26)).toLowerCase();
+          if (isFlapAddress(token0)) newFlapAddresses.push(token0);
+          else if (isFlapAddress(token1)) newFlapAddresses.push(token1);
+        }
+      } catch (e) {
+        // chunk failed silently, next chunk will cover remaining blocks
+      }
+    }
+
+    lastCheckedBlock = currentBlock;
+
+    const newOnes = [...new Set(newFlapAddresses)].filter(a => !graduatedCache.has(a));
+    if (newOnes.length === 0) return;
+
+    console.log(`[CHAIN] ${newOnes.length} candidate graduation(s) from PancakeSwap — verifying on Flap.sh...`);
+
+    // Get DexScreener market data for all candidates
+    const tokenDetails = await lookupDexScreenerTokens(newOnes);
+
+    // Separate known Flap.sh addresses (already seen in boardV2) from unknowns
+    const knownToFlap = newOnes.filter(a => allKnownFlapAddresses.has(a));
+    const unknownToFlap = newOnes.filter(a => !allKnownFlapAddresses.has(a));
+
+    // Add known Flap.sh tokens directly — we already have their metadata
+    for (const addr of knownToFlap) {
+      if (graduatedCache.has(addr)) continue;
+      const flapCoin = allKnownFlapAddresses.get(addr);
+      const pair = tokenDetails.get(addr);
+      const mapped = mapCoin(flapCoin, price, 'listed');
+      mapped.listed = true; mapped.graduated = true; mapped.bondProgress = 100;
+      if (pair) {
+        mapped.volume24h = pair.volume?.h24 || 0;
+        mapped.liquidity = pair.liquidity?.usd || 0;
+        mapped.dexUrl = pair.url || null;
+        mapped.change24h = pair.priceChange?.h24 || 0;
+        mapped.mcap = pair.marketCap || mapped.mcap;
+        mapped.graduatedAt = pair.pairCreatedAt || null;
+      }
+      graduatedCache.set(addr, mapped);
+      console.log(`[CHAIN] Added (known): ${mapped.name} (${addr})`);
+    }
+
+    // For unknown addresses: verify each on Flap.sh API.
+    // Only add if Flap.sh confirms the token — this filters out non-Flap.sh tokens
+    // that happen to have addresses ending in 7777/8888.
+    const COIN_QUERY = `query($address: String!) { coin(address: $address) { ${COIN_FIELDS} } }`;
+    for (const addr of unknownToFlap) {
+      if (graduatedCache.has(addr)) continue;
+      try {
+        const data = await queryFlap(COIN_QUERY, { address: addr });
+        if (!data?.coin) {
+          console.log(`[CHAIN] Skipped (not Flap.sh): ${addr}`);
+          continue;
+        }
+        if (!data.coin.listed) {
+          console.log(`[CHAIN] Skipped (not graduated yet): ${data.coin.name} (${addr})`);
+          continue;
+        }
+        const pair = tokenDetails.get(addr);
+        const mapped = mapCoin(data.coin, price, 'listed');
+        mapped.listed = true; mapped.graduated = true; mapped.bondProgress = 100;
+        if (pair) {
+          mapped.volume24h = pair.volume?.h24 || 0;
+          mapped.liquidity = pair.liquidity?.usd || 0;
+          mapped.dexUrl = pair.url || null;
+          mapped.change24h = pair.priceChange?.h24 || 0;
+          mapped.mcap = pair.marketCap || mapped.mcap;
+          mapped.graduatedAt = pair.pairCreatedAt || null;
+        }
+        graduatedCache.set(addr, mapped);
+        allKnownFlapAddresses.set(addr, data.coin);
+        console.log(`[CHAIN] Added (verified): ${data.coin.name} (${addr})`);
+        await new Promise(r => setTimeout(r, 150));
+      } catch (e) {
+        // Flap.sh query failed or token not found — skip
+      }
+    }
+  } catch (err) {
+    console.error('[CHAIN] Error:', err.message);
+  }
+}
+
+async function updateRecentBonding() {
+  try {
+    const [flapData, price] = await Promise.all([
+      queryFlap(RECENT_BONDING_QUERY),
+      fetchBnbPrice(),
+    ]);
+
+    // SOURCE 1: DexScreener — finds ALL graduated Flap.sh tokens (address ends in 7777 or 8888)
+    // regardless of whether Flap.sh API has indexed them yet.
+    const dexTokens = await fetchGraduatedViaDexScreener(price);
+    for (const [addr, token] of dexTokens) {
+      graduatedCache.set(addr, token);
+    }
+
+    // SOURCE 2: Flap.sh boardV2 — provides richer metadata (image, holders, tax, etc.)
+    // Flap.sh data takes priority over DexScreener for tokens in both sources.
+    // Every address seen from any section is tracked in allKnownFlapAddresses.
+    const board = flapData?.boardV2;
+    if (board) {
+      const sections = ['verified', 'newlyCreated', 'graduating', 'listed'];
+      for (const section of sections) {
+        const coins = board[section]?.coins;
+        if (!Array.isArray(coins)) continue;
+        for (const coin of coins) {
+          if (!coin.address) continue;
+          const addrLow = coin.address.toLowerCase();
+
+          // Track EVERY address we ever see — used for direct DexScreener graduation check
+          allKnownFlapAddresses.set(addrLow, coin);
+
+          // If boardV2 shows this token is still bonding, it was NOT graduated —
+          // remove from graduatedCache in case it was mistakenly added by chain detection
+          if (!coin.listed && graduatedCache.has(addrLow)) {
+            graduatedCache.delete(addrLow);
+            console.log(`[RECENT BONDING] Removed non-graduated token from cache: ${coin.name} (${addrLow})`);
+          }
+
+          // Graduating section also goes on the watchlist
+          if (section === 'graduating' && !graduationWatchList.has(addrLow)) {
+            graduationWatchList.set(addrLow, { coin, firstSeenAt: Date.now() });
+          }
+
+          if (coin.listed) {
+            const mapped = mapCoin(coin, price, 'listed');
+            const existing = graduatedCache.get(addrLow);
+            if (existing) {
+              mapped.volume24h = existing.volume24h;
+              mapped.liquidity = existing.liquidity;
+              mapped.dexUrl = existing.dexUrl;
+              mapped.dexPaid = existing.dexPaid;
+              mapped.change24h = existing.change24h;
+              mapped.buys24h = existing.buys24h;
+              mapped.sells24h = existing.sells24h;
+              // Preserve graduation timestamp from better source
+              mapped.graduatedAt = existing.graduatedAt || null;
+            } else {
+              // Newly detected as graduated — record detection time as graduation time
+              // (DexScreener or chain detection will overwrite with exact pair creation time)
+              mapped.graduatedAt = null;
+            }
+            graduatedCache.set(addrLow, mapped);
+            graduationWatchList.delete(addrLow);
+          }
+        }
+      }
+    }
+
+    // SOURCE 3: Direct DexScreener check on ALL known Flap.sh addresses not yet graduated.
+    // This catches tokens that graduated after we saw them — regardless of which section
+    // they were in. Checked in batches of 30 (DexScreener limit).
+    const unknownAddrs = [...allKnownFlapAddresses.keys()].filter(a => !graduatedCache.has(a));
+    if (unknownAddrs.length > 0) {
+      try {
+        const dexResults = await checkDexScreener(unknownAddrs);
+        for (const addr of unknownAddrs) {
+          const dex = dexResults[addr];
+          if (dex && dex.pairCount > 0) {
+            const coin = allKnownFlapAddresses.get(addr);
+            const mapped = mapCoin(coin, price, 'listed');
+            mapped.listed = true;
+            mapped.graduated = true;
+            mapped.bondProgress = 100;
+            mapped.volume24h = dex.volume24h || 0;
+            mapped.liquidity = dex.liquidity || 0;
+            mapped.dexUrl = dex.dexUrl || null;
+            mapped.dexPaid = dex.paid || false;
+            mapped.change24h = dex.priceChange24h || 0;
+            mapped.buys24h = dex.buys24h || 0;
+            mapped.sells24h = dex.sells24h || 0;
+            mapped.graduatedAt = dex.pairCreatedAt || null;
+            graduatedCache.set(addr, mapped);
+            console.log(`[RECENT BONDING] Graduation detected via direct check: ${coin.name} (${addr})`);
+          }
+        }
+      } catch (err) {
+        console.error('[RECENT BONDING] Direct DexScreener check error:', err.message);
+      }
+    }
+
+    // SOURCE 4: BSC blockchain — watches PancakeSwap V2 factory PairCreated events
+    // for any token address ending in 7777 or 8888. Catches graduations in real-time
+    // even before DexScreener indexes them. On first run scans last 3 days.
+    await fetchNewGraduationsFromChain(price);
+
+    if (graduatedCache.size === 0) return;
+
+    const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
+
+    // Top 30 from last 30 days, sorted by graduation time (newest graduated first)
+    // Filter out rugged tokens: mcap below $2,100 after graduation
+    const RUG_MCAP_THRESHOLD = 2100;
+    const sorted = [...graduatedCache.values()]
+      .filter(t => {
+        // Use graduatedAt (pair creation) as graduation timestamp; fall back to createdAt
+        const gradTs = t.graduatedAt
+          ? (typeof t.graduatedAt === 'number' ? Math.floor(t.graduatedAt / 1000) : Math.floor(new Date(t.graduatedAt).getTime() / 1000))
+          : (t.createdAt ? Math.floor(new Date(t.createdAt).getTime() / 1000) : 0);
+        if (gradTs < thirtyDaysAgo) return false;
+        if ((t.mcap || 0) < RUG_MCAP_THRESHOLD && (t.mcap || 0) > 0) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        // Sort by graduation time descending (most recently graduated first)
+        const getGradMs = t => t.graduatedAt
+          ? (typeof t.graduatedAt === 'number' ? t.graduatedAt : new Date(t.graduatedAt).getTime())
+          : (t.createdAt ? new Date(t.createdAt).getTime() : 0);
+        return getGradMs(b) - getGradMs(a);
+      })
+      .slice(0, 30);
+
+    recentBondingTokens = sorted;
+
+    console.log(`[RECENT BONDING] Updated: ${sorted.length} tokens (cache: ${graduatedCache.size}, dex: ${dexTokens.size})`);
+
+    const msg = JSON.stringify({ type: 'recent_bonding', tokens: recentBondingTokens });
+    wss.clients.forEach(client => {
+      if (client.readyState === 1) client.send(msg);
+    });
+  } catch (err) {
+    console.error("Recent bonding update error:", err.message);
+  }
+}
+
+// Fetch once at startup
+updateRecentBonding();
+
 setInterval(async () => {
   await fetchFlapTokens();
+  await updateRecentBonding();
 
   const newMsg = cachedNewTokens.length > 0 ? JSON.stringify({ type: "tokens_update", tokens: cachedNewTokens }) : null;
   const bondMsg = cachedBondingTokens.length > 0 ? JSON.stringify({ type: "tokens_update", tokens: cachedBondingTokens }) : null;

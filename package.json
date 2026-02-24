@@ -1,14 +1,16 @@
 {
   "name": "bubbleflap",
-  "version": "1.0.0",
-  "description": "BubbleFlap - Real-time Token Bubble Visualizer for BSC/BNB Chain (Flap.sh)",
+  "version": "2.0.0",
+  "description": "BubbleFlap - Real-time Token Bubble Visualizer & Trading Platform for BSC/BNB Chain (Flap.sh)",
   "license": "MIT",
+  "type": "module",
   "scripts": {
     "start": "NODE_ENV=production node app.js"
   },
   "dependencies": {
+    "ethers": "^6.16.0",
     "express": "^4.21.2",
-    "pg": "^8.16.3",
+    "pg": "^8.13.3",
     "ws": "^8.18.0"
   },
   "engines": {
