@@ -1,6 +1,4 @@
-
 # ![A preview of the BubbleFlap application](./public/logo.png) BubbleFlap — Real-Time Token Bubble Visualizer
-
 
 <div align="center">
 
@@ -11,7 +9,7 @@
 ![WebSocket](https://img.shields.io/badge/WebSocket-Real--Time-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-**A stunning real-time token visualizer for the BSC/BNB blockchain.**
+**A stunning real-time token visualizer and trading platform for the BSC/BNB blockchain.**
 
 **Watch tokens come alive as physics-based floating bubbles — sized by market cap, updated in real-time.**
 
@@ -30,28 +28,35 @@
 ### 🫧 Interactive Bubble Canvas
 - **Physics-based floating bubbles** with drift, repulsion, and center gravity
 - **Market cap-based sizing** — bigger bubbles = bigger market cap
+- **Direct DOM rendering via requestAnimationFrame** for smooth 60fps animation across 100+ tokens
 - **Scroll-to-zoom**, drag-to-pan, pinch-to-zoom on mobile
 - **Smooth organic movement** inspired by wump.fun
-- **BFLAPSWAP** - Decentralized Token Exchange
+- **Database-backed token caching** — up to 100 tokens displayed (live API + DB history)
 
 ### 📊 Real On-Chain Data
 - Live token data from **Flap.sh GraphQL API** (BSC/BNB chain)
+- **On-chain graduation detection** via LaunchedToDEX events from Flap.sh Portal contract
+- **DexScreener data enrichment** — live market cap, volume, liquidity for all graduated tokens
 - **Market Cap, Price, Holders, Dev Hold %, Burn %, Tax** — all real blockchain data
 - BNB price from **Binance API** for accurate USD conversion
 - Token images via **IPFS/Pinata** gateway
+- **Scam/rug filter** — tokens under $3K mcap auto-removed from graduated list
 
 ### 📱 Multiple Views
 | View | Description |
 |------|-------------|
-| **New Tokens** | Freshly created tokens with NEW detection (15s glow animation) |
-| **Bonding** | Tokens in the bonding curve phase |
-| **Dex Paid** | Tokens with paid DexScreener profiles |
-| **Whitepaper** | Project documentation and vision |
+| **New Tokens** | Up to 100 freshly created tokens with NEW detection (15s glow animation), database caching for history |
+| **Recent Bonding** | Top 60 recently graduated tokens detected via on-chain LaunchedToDEX events, enriched with DexScreener data |
+| **Dex Paid** | Dual-source discovery: Flap.sh API + DexScreener search, merged and deduplicated |
+| **BFlapSwap** | Built-in DEX aggregator for instant token swapping |
+| **Volume Bot** | Automated volume generation tool with gas optimization |
+| **Whitepaper** | Project documentation, vision, and roadmap |
 
 ### 🤖 AI Chatbot — Bot Bubble Flap
-- Powered by **Claude Sonnet**
+- Powered by **Claude AI** (Anthropic)
 - Token analysis, contract address lookup
 - Rich token cards with on-chain data
+- Quick Swap button — opens BFlapSwap with token pre-filled
 - Multilingual support (English / 中文)
 
 ### 🔥 NEW Token Detection
@@ -59,16 +64,17 @@
 - **Red pulsing glow** + "NEW" badge for 15 seconds
 - Multiple new tokens spread in grid layout to avoid overlap
 
-### 🔁 BFLAPSWAP - Decentralized Token Exchange
+### 🔁 BFlapSwap — Decentralized Token Exchange
 
 A fast, efficient, and fully integrated token swap interface built for the BNB Smart Chain. It allows users to trade any BEP-20 token directly within the BubbleFlap ecosystem.
 
 #### Core Swap Functionality
 - **Seamless Swapping**: Trade any BEP-20 token for another on the BNB Smart Chain.
 - **Real-time Data**: Fetches live price quotes, liquidity, and balance information.
-- **Wallet Integration**: Connects securely with Web3 wallets like MetaMask, Trust Wallet, etc.
+- **Wallet Integration**: Connects securely with MetaMask, Trust Wallet, OKX Wallet, and Binance Wallet.
 - **Transaction Previews**: Clearly displays `Price Impact`, `Minimum Received`, and `Liquidity Provider Fee` before you confirm.
-- **Swap** ungraduated and graduated token from flap.sh
+- **Swap** ungraduated and graduated tokens from flap.sh
+- **Quick Swap** from tooltips and chatbot — pre-fills token in BFlapSwap
 
 #### 🧠 Smart Routing & Controls
 - **Multi-Hop Routing**: Finds the most efficient path for your trade by routing through multiple liquidity pools (e.g., `TOKEN A` -> `WBNB` -> `TOKEN B`) to guarantee the best possible price. This can be toggled on or off.
@@ -76,17 +82,31 @@ A fast, efficient, and fully integrated token swap interface built for the BNB S
 - **Transaction Deadline**: Configure a time limit to prevent pending transactions from executing at an unfavorable price later.
 
 #### 💻 Technology & Integration
-- **Frontend Framework**: Built with **React/Next.js** for a fast and responsive user experience.
-- **Blockchain Interaction**: Utilizes **ethers.js / viem** for robust communication with the BNB Smart Chain.
-- **Liquidity Source**: Integrates directly with **PancakeSwap's Router and SDK** to tap into the largest liquidity pools on BSC.
-- **Wallet Connectivity**: Powered by standard libraries like **Wagmi/Web3-React** for broad wallet compatibility.
+- **Frontend Framework**: Built with **React 19 + TypeScript** for a fast and responsive user experience.
+- **Blockchain Interaction**: Utilizes **ethers.js** for robust communication with the BNB Smart Chain.
+- **Liquidity Source**: Integrates directly with **PancakeSwap V2 Router** to tap into the largest liquidity pools on BSC.
+- **Wallet Connectivity**: Supports MetaMask, Trust Wallet, OKX Wallet, and Binance Wallet.
+
+### 📈 Volume Bot
+
+An automated volume generation tool for BSC tokens. Create natural-looking trading activity with configurable parameters.
+
+- **Wallet Management**: Import your wallet to fund the bot. Keys are stored locally and never shared.
+- **Configurable Parameters**: Set token contract address, buy/sell amounts (min/max BNB range), interval between trades, and number of rounds.
+- **Gas Optimization**: Uses optimized gas settings by default and automatically adjusts to match blockchain network conditions when needed. Smart routing through PancakeSwap V2.
+- **Execution Control**: Start and stop campaigns at any time. Real-time status updates show completed rounds, BNB spent, and current progress.
+- **Campaign History**: All campaigns tracked in database for reference.
+
 ### 🌐 Additional Features
 - **Click-to-copy** contract address with toast notification
 - **DexScreener** badge and quick link
 - **BOND/DEX** status badges
+- **Ave.ai logo verification** badge via Moralis API
 - **Responsive design** for desktop, tablet, and mobile
-- **Multilingual** — English and Chinese (中文 default)
+- **Multilingual** — English and Chinese (中文)
 - **Dark theme** with glassmorphism UI
+- **Drag-to-resize** Recent Bonding panel (280px to 600px)
+- **Channel-based WebSocket** subscriptions per page
 
 ---
 
@@ -95,12 +115,13 @@ A fast, efficient, and fully integrated token swap interface built for the BNB S
 | Layer | Technology |
 |-------|-----------|
 | **Backend** | Node.js + Express.js |
-| **Real-Time** | WebSocket (ws library) |
+| **Real-Time** | WebSocket (ws library) with channel subscriptions |
 | **Database** | PostgreSQL |
-| **Frontend** | React 19 + TypeScript + Tailwind CSS |
-| **Data Source** | Flap.sh GraphQL API (BSC/BNB chain) |
-| **AI** | Claude Sonnet |
+| **Frontend** | React 19 + TypeScript + Vite 6 + Tailwind CSS v4 |
+| **Data Source** | Flap.sh GraphQL API + BSC on-chain events + DexScreener API |
+| **AI** | Claude AI (Anthropic) |
 | **Price Feed** | Binance API |
+| **Swap Engine** | PancakeSwap V2 Router via ethers.js |
 | **Images** | IPFS via Pinata gateway |
 
 ---
@@ -110,7 +131,7 @@ A fast, efficient, and fully integrated token swap interface built for the BNB S
 ### Prerequisites
 - **Node.js** 18+ installed
 - **PostgreSQL** database
-- (Optional) *Claude API key** for AI chatbot
+- (Optional) **Claude API key** for AI chatbot
 
 ### 1. Clone the Repository
 ```bash
@@ -131,8 +152,8 @@ cp .env.example .env
 Edit `.env` with your values:
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/bubbleflap
-ADMIN_PASSWORD=your_secure_password
-CLAUDE_API_KEY=sk-or-v1-your-key  # Optional
+CLAUDE_API_KEY=your-claude-api-key  # Optional, for AI chatbot
+MORALIS_API_KEY=your_moralis_key       # Optional, for Ave.ai logo detection
 PORT=3001
 NODE_ENV=production
 ```
@@ -156,7 +177,7 @@ Your BubbleFlap instance will be running at `http://localhost:3001` 🎉
 
 ```
 BubbleFlap/
-├── app.js              # Main server (Express + WebSocket + API)
+├── app.js              # Main server (Express + WebSocket + API + Volume Bot)
 ├── public/             # Built frontend files
 │   ├── index.html      # Main HTML entry point
 │   ├── favicon.png     # Site favicon
@@ -174,15 +195,14 @@ BubbleFlap/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/new-tokens` | GET | New/unbonded tokens for bubble canvas |
+| `/api/new-tokens` | GET | New/unbonded tokens for bubble canvas (up to 100) |
 | `/api/bonding-tokens` | GET | Tokens in bonding curve phase |
 | `/api/bonded-tokens` | GET | Graduated/DEX-listed tokens |
-| `/api/dexpaid-tokens` | GET | Tokens with paid DexScreener profiles |
+| `/api/recent-bonding` | GET | Top 60 recently graduated tokens with DexScreener data |
+| `/api/dexpaid-tokens` | GET | Tokens with paid DexScreener profiles (dual-source) |
 | `/api/tokens` | GET | All token data combined |
-| `/api/settings` | GET/POST | Site settings (admin protected) |
-| `/api/admin/login` | POST | Admin authentication |
-| `/api/admin/visitors` | GET | Visitor traffic data (admin protected) |
 | `/api/chat` | POST | AI chatbot endpoint |
+| `/api/volume-bot/*` | Various | Volume bot campaign management |
 | `/ws` | WebSocket | Real-time token updates |
 
 ### WebSocket Protocol
@@ -194,8 +214,8 @@ Connect to `/ws` and subscribe to channels:
 
 Server pushes updates every ~15 seconds:
 ```json
-{ "type": "new-tokens", "data": [...] }
-{ "type": "bonding-tokens", "data": [...] }
+{ "type": "tokens_update", "tokens": [...] }
+{ "type": "recent_bonding", "tokens": [...] }
 ```
 
 ---
@@ -216,18 +236,10 @@ See the full [Deployment Guide](DEPLOYMENT.md) for detailed instructions on depl
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `ADMIN_PASSWORD` | Yes | Password for admin panel access |
-| `CLAUDE_API_KEY` | No | CLAUDE API key for AI chatbot |
+| `CLAUDE_API_KEY` | No | Claude API key for AI chatbot |
+| `MORALIS_API_KEY` | No | Moralis API key for Ave.ai logo detection |
 | `PORT` | No | Server port (default: 3001) |
 | `NODE_ENV` | No | Set to `production` for production mode |
-
-### Admin Panel
-Access the admin panel by clicking the admin icon in the header. Use your `ADMIN_PASSWORD` to log in.
-
-From the admin panel you can:
-- View real-time visitor traffic and charts
-- Update site settings (contract address, social links)
-- Monitor online users
 
 ---
 
@@ -241,8 +253,23 @@ From the admin panel you can:
 | **Burn %** | Dead address (0x...dead) balance ÷ 1,000,000,000 total supply | On-chain |
 | **Holders** | Flap.sh API holder count | Real-time |
 | **Tax** | Smart contract buy/sell tax | On-chain |
+| **Volume 24h** | DexScreener API (graduated tokens) | Real-time |
+| **Liquidity** | DexScreener API (graduated tokens) | Real-time |
 
 > All data is real on-chain data from the BSC/BNB blockchain, matching BscScan.
+
+---
+
+## 🔄 What's New in v2.0
+
+- **On-chain graduation detection** — scans BSC blockchain for LaunchedToDEX events every 15 seconds
+- **DexScreener data enrichment** — all graduated tokens get live mcap, volume, liquidity data
+- **100-token New page** — database caching keeps token history, live API always takes priority
+- **Volume Bot** — automated buy/sell volume generation with gas optimization
+- **BFlapSwap** — built-in DEX aggregator with wallet connection
+- **Dual-source DexPaid** — Flap.sh API + DexScreener search, merged and deduplicated
+- **Scam filter** — tokens under $3K mcap auto-removed from graduated list
+- **Channel-based WebSocket** — each page subscribes to its own data channel
 
 ---
 
