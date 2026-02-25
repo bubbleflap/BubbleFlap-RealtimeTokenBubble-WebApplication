@@ -27,6 +27,7 @@
 ![A preview of the BubbleFlap application](./public/16.png)
 ![A preview of the BubbleFlap application](./public/17.png)
 ![A preview of the BubbleFlap application](./public/18.jpg)
+![A preview of the BubbleFlap application](./public/19.png)
 ---
 
 ## ✨ Features
