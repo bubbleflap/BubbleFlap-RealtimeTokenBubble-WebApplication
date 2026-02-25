@@ -56,6 +56,8 @@
 | **Dex Paid** | Dual-source discovery: Flap.sh API + DexScreener search, merged and deduplicated |
 | **BFlapSwap** | Built-in DEX aggregator for instant token swapping |
 | **Volume Bot** | Automated volume generation tool with gas optimization |
+| **BFLAP Lottery** | On-chain spin-the-wheel lottery powered by BFLAP tokens — win BNB prizes every round |
+| **BFLAP Staking** | Stake BFLAP across three on-chain pools — Flexible 60%, 7-Day 90%, 15-Day 140% APY |
 | **Whitepaper** | Project documentation, vision, and roadmap |
 
 ### 🤖 AI Chatbot — Bot Bubble Flap
@@ -71,203 +73,58 @@
 - Multiple new tokens spread in grid layout to avoid overlap
 
 ### 🔁 BFlapSwap — Decentralized Token Exchange
-
-A fast, efficient, and fully integrated token swap interface built for the BNB Smart Chain. It allows users to trade any BEP-20 token directly within the BubbleFlap ecosystem.
-
-#### Core Swap Functionality
-- **Seamless Swapping**: Trade any BEP-20 token for another on the BNB Smart Chain.
-- **Real-time Data**: Fetches live price quotes, liquidity, and balance information.
-- **Wallet Integration**: Connects securely with MetaMask, Trust Wallet, OKX Wallet, and Binance Wallet.
-- **Transaction Previews**: Clearly displays `Price Impact`, `Minimum Received`, and `Liquidity Provider Fee` before you confirm.
-- **Swap** ungraduated and graduated tokens from flap.sh
-- **Quick Swap** from tooltips and chatbot — pre-fills token in BFlapSwap
-
-#### 🧠 Smart Routing & Controls
-- **Multi-Hop Routing**: Finds the most efficient path for your trade by routing through multiple liquidity pools (e.g., `TOKEN A` -> `WBNB` -> `TOKEN B`) to guarantee the best possible price. This can be toggled on or off.
-- **Customizable Slippage**: Set your slippage tolerance (e.g., 0.1%, 0.5%, 1.0%) to protect against price volatility.
-- **Transaction Deadline**: Configure a time limit to prevent pending transactions from executing at an unfavorable price later.
-
-#### 💻 Technology & Integration
-- **Frontend Framework**: Built with **React 19 + TypeScript** for a fast and responsive user experience.
-- **Blockchain Interaction**: Utilizes **ethers.js** for robust communication with the BNB Smart Chain.
-- **Liquidity Source**: Integrates directly with **PancakeSwap V2 Router** to tap into the largest liquidity pools on BSC.
-- **Wallet Connectivity**: Supports MetaMask, Trust Wallet, OKX Wallet, and Binance Wallet.
-
-### 📈 Volume Bot
-
-An automated volume generation tool for BSC tokens. Create natural-looking trading activity with configurable parameters.
-
-- **Wallet Management**: Import your wallet to fund the bot. Keys are stored locally and never shared.
-- **Configurable Parameters**: Set token contract address, buy/sell amounts (min/max BNB range), interval between trades, and number of rounds.
-- **Gas Optimization**: Uses optimized gas settings by default and automatically adjusts to match blockchain network conditions when needed. Smart routing through PancakeSwap V2.
-- **Execution Control**: Start and stop campaigns at any time. Real-time status updates show completed rounds, BNB spent, and current progress.
-- **Campaign History**: All campaigns tracked in database for reference.
-
-### 🌐 Additional Features
-- **Click-to-copy** contract address with toast notification
-- **DexScreener** badge and quick link
-- **BOND/DEX** status badges
-- **Ave.ai logo verification** badge via Moralis API
-- **Responsive design** for desktop, tablet, and mobile
-- **Multilingual** — English and Chinese (中文)
-- **Dark theme** with glassmorphism UI
-- **Drag-to-resize** Recent Bonding panel (280px to 600px)
-- **Channel-based WebSocket** subscriptions per page
+- Swap any BSC token via aggregated DEX routing
+- Wallet connect (MetaMask / WalletConnect)
+- Slippage control and gas estimation
+- Live price impact display
 
 ---
 
-## 🏗️ Tech Stack
+## 🎰 BFLAP Lottery
 
-| Layer | Technology |
-|-------|-----------|
-| **Backend** | Node.js + Express.js |
-| **Real-Time** | WebSocket (ws library) with channel subscriptions |
-| **Database** | PostgreSQL |
-| **Frontend** | React 19 + TypeScript + Vite 6 + Tailwind CSS v4 |
-| **Data Source** | Flap.sh GraphQL API + BSC on-chain events + DexScreener API |
-| **AI** | Claude AI (Anthropic) |
-| **Price Feed** | Binance API |
-| **Swap Engine** | PancakeSwap V2 Router via ethers.js |
-| **Images** | IPFS via Pinata gateway |
+BubbleFlap features a fully on-chain lottery powered by **$BFLAP tokens**.
 
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- **Node.js** 18+ installed
-- **PostgreSQL** database
-- (Optional) **Claude API key** for AI chatbot
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/bubbleflap/BubbleFlap-RealtimeTokenBubble-WebApplication.git
-cd BubbleFlap-RealtimeTokenBubble-WebApplication
-```
-
-### 2. Install Dependencies
-```bash
-npm install
-```
-
-### 3. Set Up Environment Variables
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your values:
-```env
-DATABASE_URL=postgresql://user:password@localhost:5432/bubbleflap
-CLAUDE_API_KEY=your-claude-api-key  # Optional, for AI chatbot
-MORALIS_API_KEY=your_moralis_key       # Optional, for Ave.ai logo detection
-PORT=3001
-NODE_ENV=production
-```
-
-### 4. Set Up Database
-Run the SQL setup script on your PostgreSQL database:
-```bash
-psql -U your_user -d bubbleflap -f database_setup.sql
-```
-
-### 5. Start the Server
-```bash
-npm start
-```
-
-Your BubbleFlap instance will be running at `http://localhost:3001` 🎉
+- **How it works**: Purchase tickets using BNB and spin the wheel for a chance to win a share of the prize pool
+- **18-segment wheel** with various prize tiers and "Try Again" segments
+- **BNB prize pool** — prizes paid out in BNB directly to your wallet
+- **Transparent & verifiable** — all results determined on-chain
+- **Round-based** — each lottery round has a defined prize pool and ticket supply
+- **Admin controls** — round management via secure admin panel
+- Live ticket counts, prize pool display, and animated spin wheel in the UI
+- Accessible at [bubbleflap.fun](https://bubbleflap.fun) under the Lottery tab
 
 ---
 
-## 📁 Project Structure
+## 💎 BFLAP Staking
 
-```
-BubbleFlap/
-├── app.js              # Main server (Express + WebSocket + API + Volume Bot)
-├── public/             # Built frontend files
-│   ├── index.html      # Main HTML entry point
-│   ├── favicon.png     # Site favicon
-│   ├── social.jpg      # Social media preview image
-│   └── assets/         # JS, CSS, and image assets
-├── database_setup.sql  # Database schema setup
-├── package.json        # Dependencies
-├── .env.example        # Environment variable template
-└── README.md           # This file
-```
+Earn passive rewards by staking **$BFLAP tokens** in one of three on-chain pools.
 
----
+### Staking Pools
 
-## 🔌 API Endpoints
+| Pool | APY | Lock Period | Min Stake |
+|------|-----|-------------|-----------|
+| **Flexible** | 60% | None — withdraw anytime | 50,000 BFLAP |
+| **7-Day** | 90% | 7 days | 50,000 BFLAP |
+| **15-Day** | 140% | 15 days | 50,000 BFLAP |
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/new-tokens` | GET | New/unbonded tokens for bubble canvas (up to 100) |
-| `/api/bonding-tokens` | GET | Tokens in bonding curve phase |
-| `/api/bonded-tokens` | GET | Graduated/DEX-listed tokens |
-| `/api/recent-bonding` | GET | Top 60 recently graduated tokens with DexScreener data |
-| `/api/dexpaid-tokens` | GET | Tokens with paid DexScreener profiles (dual-source) |
-| `/api/tokens` | GET | All token data combined |
-| `/api/chat` | POST | AI chatbot endpoint |
-| `/api/volume-bot/*` | Various | Volume bot campaign management |
-| `/ws` | WebSocket | Real-time token updates |
-
-### WebSocket Protocol
-Connect to `/ws` and subscribe to channels:
-```json
-{ "type": "subscribe", "channel": "new" }
-{ "type": "subscribe", "channel": "bonding" }
-```
-
-Server pushes updates every ~15 seconds:
-```json
-{ "type": "tokens_update", "tokens": [...] }
-{ "type": "recent_bonding", "tokens": [...] }
-```
+### Key Features
+- **Earn BFLAP** — rewards accumulate in real-time on-chain
+- **Claim or Compound** — claim rewards to wallet or re-stake for maximum yield
+- **Emergency Withdraw** — exit any pool at any time (10% penalty applies, rewards forfeited)
+- **Wallet integration** — connect MetaMask or WalletConnect to stake, claim, and withdraw
+- **Live stats** — TVL, APY, your staked balance, and pending rewards displayed in real-time
+- Accessible at [bubbleflap.fun](https://bubbleflap.fun) under the Staking tab
 
 ---
-
-## 🌍 Deployment
-
-See the full [Deployment Guide](DEPLOYMENT.md) for detailed instructions on deploying to:
-- **VPS / Cloud Server** (DigitalOcean, AWS, Linode, Vultr)
-- **Railway / Render / Fly.io**
-- **Any Node.js hosting**
-
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `CLAUDE_API_KEY` | No | Claude API key for AI chatbot |
-| `MORALIS_API_KEY` | No | Moralis API key for Ave.ai logo detection |
-| `PORT` | No | Server port (default: 3001) |
-| `NODE_ENV` | No | Set to `production` for production mode |
-
----
-
-## 🧮 Token Data Explained
-
-| Field | Source | Calculation |
-|-------|--------|-------------|
-| **Market Cap** | On-chain BNB reserves × Binance BNB/USD price | Real-time |
-| **Price** | Market cap ÷ circulating supply | Real-time |
-| **Dev Hold %** | Creator wallet balance ÷ 1,000,000,000 total supply | On-chain |
-| **Burn %** | Dead address (0x...dead) balance ÷ 1,000,000,000 total supply | On-chain |
-| **Holders** | Flap.sh API holder count | Real-time |
-| **Tax** | Smart contract buy/sell tax | On-chain |
-| **Volume 24h** | DexScreener API (graduated tokens) | Real-time |
-| **Liquidity** | DexScreener API (graduated tokens) | Real-time |
 
 > All data is real on-chain data from the BSC/BNB blockchain, matching BscScan.
 
 ---
 
-## 🔄 What's New in v2.0
+## 🔄 What's New in v3.0
 
+- **BFLAP Lottery** — on-chain spin-the-wheel lottery with BNB prize pool, 18-segment wheel, round management
+- **BFLAP Staking** — three on-chain staking pools (Flexible 60%, 7-Day 90%, 15-Day 140% APY), claim & compound
 - **On-chain graduation detection** — scans BSC blockchain for LaunchedToDEX events every 15 seconds
 - **DexScreener data enrichment** — all graduated tokens get live mcap, volume, liquidity data
 - **100-token New page** — database caching keeps token history, live API always takes priority
